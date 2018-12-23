@@ -1,28 +1,38 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:minesweeper/main.dart';
 
 const int _dim = 8;
-const _mines = 10;
-const MINE = -1; // denotes the cell contains a MINE
+const _mines = 2;
 
 List<List<CellState>> _board = List.generate(
     _dim, (i) => List<CellState>.generate(_dim, (j) => CellState(i, j)));
 
+GameController gameController;
+
 class GameBoard extends StatefulWidget {
+  final gameState;
+
+  GameBoard(gameCtrl, this.gameState) {
+    gameController = gameCtrl;
+  }
+
   @override
-  State createState() => GameState();
+  State createState() => gameState;
 }
 
 class GameState extends State<GameBoard> {
   @override
   void initState() {
-    _resetBoard();
+    resetBoard();
 
     super.initState();
   }
 
-  void _resetBoard() {
+  void resetBoard() {
+    _board.expand((row) => row).forEach((cell) => cell.reset());
+
     Random rnd = Random();
     // place mines:
     if (_mines > _dim * _dim) {
@@ -34,21 +44,16 @@ class GameState extends State<GameBoard> {
         x = rnd.nextInt(_dim);
         y = rnd.nextInt(_dim);
       } while (_board[x][y].isMine());
-
       _board[x][y].setMine();
     }
     // calc nearby numbers:
-    for (int i = 0; i < _dim; i++) {
-      for (int j = 0; j < _dim; j++) {
-        if (_board[i][j].isMine()) {
-          continue;
-        }
-        _board[i][j].nearby = _board[i][j]
-            .getNearbyCells()
-            .map((cell) => cell.isMine() ? 1 : 0)
-            .reduce((acc, cell) => acc + cell);
-      }
-    }
+    _board.expand((row) => row).where((cell) => !cell.isMine()).forEach((cell) {
+      cell.nearby = cell
+          .getNearbyCells()
+          .map((cell) => cell.isMine() ? 1 : 0)
+          .reduce((acc, cell) => acc + cell);
+    });
+    setState(() {});
   }
 
   @override
@@ -87,6 +92,12 @@ class CellState extends State<GameCell> {
 
   CellState(this.x, this.y);
 
+  reset() {
+    revealed = false;
+    flagged = false;
+    nearby = 0;
+  }
+
   bool isMine() {
     return nearby == -1;
   }
@@ -95,12 +106,34 @@ class CellState extends State<GameCell> {
     nearby = -1;
   }
 
+  void revealIfMine() {
+    if (isMine()) {
+      setState(() {
+        revealed = true;
+      });
+    }
+  }
+
   void reveal() {
     if (revealed || flagged) return;
 
     setState(() {
       revealed = true;
     });
+
+    if (isMine()) {
+      gameController.lose();
+      _board.expand((row) => row).forEach((cell) => cell.revealIfMine());
+    }
+
+    int unrevealed = _board
+        .expand((row) => row)
+        .map((cell) => cell.revealed ? 0 : 1)
+        .reduce((acc, it) => acc + it);
+    if (unrevealed == _mines) {
+      gameController.win();
+      _board.expand((row) => row).forEach((cell) => cell.revealIfMine());
+    }
 
     // auto click, if the cell is completely safe
     if (nearby == 0) {
@@ -135,7 +168,10 @@ class CellState extends State<GameCell> {
           });
         }
       },
-      onTap: reveal,
+      onTap: () {
+        gameController.startTimer();
+        reveal();
+      },
       child: Container(
         margin: EdgeInsets.all(2.0),
         height: 40.0,
