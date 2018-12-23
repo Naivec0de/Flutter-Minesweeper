@@ -6,15 +6,15 @@ const int _dim = 8;
 const _mines = 10;
 const MINE = -1; // denotes the cell contains a MINE
 
+List<List<CellState>> _board = List.generate(
+    _dim, (i) => List<CellState>.generate(_dim, (j) => CellState(i, j)));
+
 class GameBoard extends StatefulWidget {
   @override
   State createState() => GameState();
 }
 
 class GameState extends State<GameBoard> {
-  List<List<int>> _board =
-      List.generate(_dim, (i) => List<int>.filled(_dim, 0));
-
   @override
   void initState() {
     _resetBoard();
@@ -33,33 +33,20 @@ class GameState extends State<GameBoard> {
       do {
         x = rnd.nextInt(_dim);
         y = rnd.nextInt(_dim);
-      } while (_board[x][y] == MINE);
+      } while (_board[x][y].isMine());
 
-      _board[x][y] = MINE;
+      _board[x][y].setMine();
     }
     // calc nearby numbers:
-    int isMine(int i, int j) {
-      if (i >= 0 && i < _dim && j >= 0 && j < _dim) {
-        return _board[i][j] == MINE ? 1 : 0;
-      }
-      return 0;
-    }
-
     for (int i = 0; i < _dim; i++) {
       for (int j = 0; j < _dim; j++) {
-        if (_board[i][j] == MINE) {
+        if (_board[i][j].isMine()) {
           continue;
         }
-        int count = 0;
-        count += isMine(i - 1, j - 1);
-        count += isMine(i - 1, j + 1);
-        count += isMine(i - 1, j);
-        count += isMine(i + 1, j - 1);
-        count += isMine(i + 1, j + 1);
-        count += isMine(i + 1, j);
-        count += isMine(i, j - 1);
-        count += isMine(i, j + 1);
-        _board[i][j] = count;
+        _board[i][j].nearby = _board[i][j]
+            .getNearbyCells()
+            .map((cell) => cell.isMine() ? 1 : 0)
+            .reduce((acc, cell) => acc + cell);
       }
     }
   }
@@ -74,7 +61,7 @@ class GameState extends State<GameBoard> {
     for (int i = 0; i < _dim; i++) {
       final row = <Widget>[];
       for (int j = 0; j < _dim; j++) {
-        final cell = GameCell(count: _board[i][j]);
+        final cell = GameCell(i, j);
         row.add(cell);
       }
       col.add(Row(children: row));
@@ -84,45 +71,88 @@ class GameState extends State<GameBoard> {
 }
 
 class GameCell extends StatefulWidget {
-  final int count;
+  final int i, j;
 
-  GameCell({this.count});
+  GameCell(this.i, this.j);
 
   @override
-  State createState() => CellState(count: count);
+  State createState() => _board[i][j];
 }
 
 class CellState extends State<GameCell> {
+  int x, y;
   bool revealed = false;
   bool flagged = false;
-  int count = 0;
+  int nearby = 0; // -1 is MINE, non-negative numbers are nearby indicators
 
-  CellState({this.count});
+  CellState(this.x, this.y);
+
+  bool isMine() {
+    return nearby == -1;
+  }
+
+  void setMine() {
+    nearby = -1;
+  }
+
+  void reveal() {
+    if (revealed || flagged) return;
+
+    setState(() {
+      revealed = true;
+    });
+
+    // auto click, if the cell is completely safe
+    if (nearby == 0) {
+      getNearbyCells().forEach((cell) => cell.reveal());
+    }
+  }
+
+  List<CellState> getNearbyCells() {
+    return [
+      Point(x - 1, y - 1),
+      Point(x - 1, y + 1),
+      Point(x - 1, y),
+      Point(x + 1, y - 1),
+      Point(x + 1, y + 1),
+      Point(x + 1, y),
+      Point(x, y - 1),
+      Point(x, y + 1),
+    ]
+        .where((pt) => pt.x >= 0 && pt.x < _dim && pt.y >= 0 && pt.y < _dim)
+        .map((pt) => _board[pt.x][pt.y])
+        .toList();
+  }
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onLongPress: () {
-        if (revealed) {
-          // highlight nearby cells:
-        } else {
+        if (!revealed) {
           // flag current cell:
           setState(() {
             flagged = !flagged;
           });
         }
       },
-      onTap: () {
-        setState(() {
-          revealed = true;
-        });
-      },
+      onTap: reveal,
       child: Container(
         margin: EdgeInsets.all(2.0),
-        height: 30.0,
-        width: 30.0,
+        height: 40.0,
+        width: 40.0,
         color: flagged ? Colors.red : revealed ? Colors.white : Colors.grey,
-        child: Text('$count'),
+//        color: isMine() ? Colors.red : Colors.white,
+        child: revealed
+            ? (isMine()
+                ? Icon(
+                    Icons.brightness_high,
+                    color: Colors.black,
+                  )
+                : Text(
+                    nearby == 0 ? "" : '$nearby',
+                    style: TextStyle(fontSize: 24),
+                  ))
+            : Text(""),
       ),
     );
   }
