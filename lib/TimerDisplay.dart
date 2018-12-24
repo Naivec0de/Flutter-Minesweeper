@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:minesweeper/main.dart';
 
 class TimerDisplay extends StatefulWidget {
   final gameController;
@@ -61,12 +60,14 @@ class TimerState extends State<TimerDisplay> {
           widget.gameController.resetGame();
         },
         child: Container(
-          height: 40,
-          width: 40,
-          color: Colors.blue,
-          child: Text(
-            '$ticks',
-            style: TextStyle(fontSize: 24.0),
+          height: 30,
+          width: 120,
+          color: Colors.blue[100],
+          child: Center(
+            child: Text(
+              '$ticks',
+              style: TextStyle(fontSize: 24.0),
+            ),
           ),
         ));
   }

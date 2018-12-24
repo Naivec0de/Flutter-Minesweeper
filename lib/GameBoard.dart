@@ -1,10 +1,10 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
-import 'package:minesweeper/main.dart';
+import 'package:minesweeper/GameScreen.dart';
 
-const int _dim = 8;
-const _mines = 2;
+int _dim = 8;
+int _mines = 10;
 
 List<List<CellState>> _board = List.generate(
     _dim, (i) => List<CellState>.generate(_dim, (j) => CellState(i, j)));
@@ -23,6 +23,11 @@ class GameBoard extends StatefulWidget {
 }
 
 class GameState extends State<GameBoard> {
+  GameState(int dim, int mines) {
+    _dim = dim;
+    _mines = mines;
+  }
+
   @override
   void initState() {
     resetBoard();
@@ -58,10 +63,7 @@ class GameState extends State<GameBoard> {
 
   @override
   Widget build(BuildContext context) {
-    return _buildBoard();
-  }
-
-  Widget _buildBoard() {
+    print("building a $_dim x $_dim board.");
     final col = <Widget>[];
     for (int i = 0; i < _dim; i++) {
       final row = <Widget>[];
@@ -69,7 +71,10 @@ class GameState extends State<GameBoard> {
         final cell = GameCell(i, j);
         row.add(cell);
       }
-      col.add(Row(children: row));
+      col.add(Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: row,
+      ));
     }
     return Column(children: col);
   }
@@ -106,38 +111,49 @@ class CellState extends State<GameCell> {
     nearby = -1;
   }
 
-  void revealIfMine() {
+  void endGame(bool won) {
     if (isMine()) {
       setState(() {
-        revealed = true;
+        if (won) {
+          flagged = true;
+        } else {
+          revealed = true;
+        }
       });
     }
   }
 
   void reveal() {
-    if (revealed || flagged) return;
+    if (flagged) return;
 
     setState(() {
       revealed = true;
     });
 
+    // lose condition:
     if (isMine()) {
-      gameController.lose();
-      _board.expand((row) => row).forEach((cell) => cell.revealIfMine());
+      gameController.endGame(false);
+      _board.expand((row) => row).forEach((cell) => cell.endGame(false));
     }
 
+    // win condition:
     int unrevealed = _board
         .expand((row) => row)
         .map((cell) => cell.revealed ? 0 : 1)
         .reduce((acc, it) => acc + it);
     if (unrevealed == _mines) {
-      gameController.win();
-      _board.expand((row) => row).forEach((cell) => cell.revealIfMine());
+      gameController.endGame(true);
+      _board.expand((row) => row).forEach((cell) => cell.endGame(true));
     }
 
-    // auto click, if the cell is completely safe
-    if (nearby == 0) {
-      getNearbyCells().forEach((cell) => cell.reveal());
+    // auto click, if nearby flags matches nearby mines:
+    int flagsNearby = getNearbyCells()
+        .map((cell) => cell.flagged ? 1 : 0)
+        .reduce((acc, v) => acc + v);
+    if (flagsNearby == nearby) {
+      getNearbyCells()
+          .where((cell) => !cell.revealed)
+          .forEach((cell) => cell.reveal());
     }
   }
 
@@ -159,36 +175,44 @@ class CellState extends State<GameCell> {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onLongPress: () {
-        if (!revealed) {
-          // flag current cell:
-          setState(() {
-            flagged = !flagged;
-          });
-        }
-      },
-      onTap: () {
-        gameController.startTimer();
-        reveal();
-      },
-      child: Container(
-        margin: EdgeInsets.all(2.0),
-        height: 40.0,
-        width: 40.0,
-        color: flagged ? Colors.red : revealed ? Colors.white : Colors.grey,
-//        color: isMine() ? Colors.red : Colors.white,
-        child: revealed
-            ? (isMine()
-                ? Icon(
-                    Icons.brightness_high,
-                    color: Colors.black,
-                  )
-                : Text(
-                    nearby == 0 ? "" : '$nearby',
-                    style: TextStyle(fontSize: 24),
-                  ))
-            : Text(""),
+    return Expanded(
+      child: FittedBox(
+        fit: BoxFit.fill,
+        child: GestureDetector(
+          onLongPress: () {
+            if (!revealed) {
+              // flag current cell:
+              setState(() {
+                flagged = !flagged;
+              });
+            }
+          },
+          onTap: () {
+            gameController.startTimer();
+            reveal();
+          },
+          child: Container(
+            margin: EdgeInsets.all(2.0),
+            height: 30.0,
+            width: 30.0,
+            color: flagged
+                ? Colors.red[300]
+                : revealed ? Colors.grey[300] : Colors.grey,
+            child: Center(
+              child: revealed
+                  ? (isMine()
+                      ? Icon(
+                          Icons.brightness_high,
+                          color: Colors.black,
+                        )
+                      : Text(
+                          nearby == 0 ? "" : '$nearby',
+                          style: TextStyle(fontSize: 24),
+                        ))
+                  : Text(""),
+            ),
+          ),
+        ),
       ),
     );
   }
